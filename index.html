@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>SGC Digital</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --azul:#0b3d62; --azul-claro:#1f6fb2; --gris:#f4f6f8; --borde:#dde3e8;
+    --ok:#1f9d55; --ng:#c0392b; --texto:#22303c;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Segoe UI, Arial, sans-serif;background:var(--gris);color:var(--texto);}
+  header{background:var(--azul);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
+  header h1{font-size:18px;margin:0;}
+  #userBox{font-size:13px;display:flex;gap:12px;align-items:center;}
+  #userBox button{background:#c0392b;border:none;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;}
+  nav{display:flex;background:#0e4a75;flex-wrap:wrap;}
+  nav button{background:none;border:none;color:#cfe3f5;padding:12px 16px;cursor:pointer;font-size:13px;}
+  nav button.active,nav button:hover{background:var(--azul-claro);color:#fff;}
+  main{padding:20px;max-width:1200px;margin:0 auto;}
+  .card{background:#fff;border:1px solid var(--borde);border-radius:8px;padding:18px;margin-bottom:16px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+  .kpi{background:#fff;border:1px solid var(--borde);border-radius:8px;padding:16px;text-align:center;}
+  .kpi .valor{font-size:28px;font-weight:700;color:var(--azul);}
+  .kpi .label{font-size:12px;color:#607080;margin-top:4px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--borde);text-align:left;}
+  th{background:#eef2f6;}
+  .status-ok{color:var(--ok);font-weight:600;}
+  .status-ng{color:var(--ng);font-weight:600;}
+  .badge{padding:2px 8px;border-radius:10px;font-size:11px;color:#fff;}
+  .badge.Abierta{background:#c0392b;}
+  .badge.En.proceso{background:#e2a03f;}
+  .badge.Verificación{background:#1f6fb2;}
+  .badge.Cerrada{background:#1f9d55;}
+  input,select,textarea{width:100%;padding:7px;margin:4px 0 10px;border:1px solid var(--borde);border-radius:4px;font-size:13px;}
+  label{font-size:12px;color:#50606f;font-weight:600;}
+  button.primary{background:var(--azul-claro);color:#fff;border:none;padding:9px 16px;border-radius:4px;cursor:pointer;font-size:13px;}
+  button.secondary{background:#fff;border:1px solid var(--borde);padding:8px 14px;border-radius:4px;cursor:pointer;font-size:13px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  #loginScreen{height:100vh;display:flex;align-items:center;justify-content:center;background:var(--azul);}
+  .loginBox{background:#fff;padding:30px;border-radius:8px;width:300px;text-align:center;}
+  .hidden{display:none !important;}
+  .detalleFila{display:grid;grid-template-columns:40px 1fr 90px 90px 80px 30px;gap:6px;align-items:center;margin-bottom:6px;}
+  .tag{display:inline-block;background:#eef2f6;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;}
+  a.doclink{color:var(--azul-claro);}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="loginBox">
+    <h2>SGC Digital</h2>
+    <input id="loginUser" placeholder="Usuario">
+    <input id="loginPass" type="password" placeholder="Contraseña">
+    <button class="primary" style="width:100%" onclick="login()">Ingresar</button>
+    <p id="loginError" style="color:red;font-size:12px;"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header>
+    <h1>Sistema de Gestión de Calidad</h1>
+    <div id="userBox">
+      <span id="userLabel"></span>
+      <button onclick="logout()">Salir</button>
+    </div>
+  </header>
+  <nav id="mainNav"></nav>
+  <main id="mainContent"></main>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN — reemplaza esta URL por la de tu Web App de
+   Google Apps Script (ver guía de despliegue / configuracion_drive)
+   ============================================================ */
+const API_URL = "https://script.google.com/macros/s/AKfycbxheVivanagt_AfmXYyBqwDvLx0qXW_kaKHVWpe5HiySWdKJpwCe59Usl9YrkjFyEYnaQ/exec";
+
+let SESSION = null; // {usuario, nombre, rol}
+
+// ---------- Llamadas a la API ----------
+async function apiCall(action, payload = {}) {
+  const body = JSON.stringify({ action, ...payload });
+  const res = await fetch(API_URL, { method: 'POST', body });
+  return await res.json();
+}
+
+// ---------- Auth ----------
+async function login() {
+  const usuario = document.getElementById('loginUser').value;
+  const password = document.getElementById('loginPass').value;
+  document.getElementById('loginError').innerText = 'Verificando...';
+  const r = await apiCall('login', { usuario, password });
+  if (!r.ok) {
+    document.getElementById('loginError').innerText = r.error || 'Error de acceso';
+    return;
+  }
+  SESSION = r;
+  sessionStorage.setItem('sgc_session', JSON.stringify(r));
+  iniciarApp();
+}
+
+function logout() {
+  sessionStorage.removeItem('sgc_session');
+  location.reload();
+}
+
+// ---------- Definición de módulos por rol ----------
+// Operador: captura. Calidad: captura + aprueba. Gerencia: solo visualiza.
+const MODULOS = [
+  { id: 'dashboard', label: 'Dashboard KPI', roles: ['Operador','Calidad','Gerencia'] },
+  { id: 'inspeccion', label: 'Inspección / Liberación', roles: ['Operador','Calidad','Gerencia'] },
+  { id: 'plancontrol', label: 'Plan de Control', roles: ['Operador','Calidad','Gerencia'] },
+  { id: 'rca', label: 'RCA (8D)', roles: ['Calidad','Gerencia'] },
+  { id: 'acciones', label: 'Acciones Correctivas', roles: ['Operador','Calidad','Gerencia'] },
+  { id: 'mejoras', label: 'Mejora Continua', roles: ['Operador','Calidad','Gerencia'] },
+  { id: 'documentos', label: 'Documentos (Drive)', roles: ['Operador','Calidad','Gerencia'] }
+];
+
+function esSoloLectura() {
+  return SESSION.rol === 'Gerencia';
+}
+
+function iniciarApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('userLabel').innerText = `${SESSION.nombre} (${SESSION.rol})`;
+  const nav = document.getElementById('mainNav');
+  nav.innerHTML = '';
+  MODULOS.filter(m => m.roles.includes(SESSION.rol)).forEach((m, i) => {
+    const btn = document.createElement('button');
+    btn.innerText = m.label;
+    btn.onclick = () => cargarModulo(m.id, btn);
+    if (i === 0) btn.classList.add('active');
+    nav.appendChild(btn);
+  });
+  cargarModulo('dashboard');
+}
+
+function marcarActivo(btn) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function cargarModulo(id, btn) {
+  marcarActivo(btn);
+  const c = document.getElementById('mainContent');
+  c.innerHTML = '<p>Cargando...</p>';
+  switch (id) {
+    case 'dashboard': renderDashboard(c); break;
+    case 'inspeccion': renderInspeccion(c); break;
+    case 'plancontrol': renderPlanControl(c); break;
+    case 'rca': renderRCA(c); break;
+    case 'acciones': renderAcciones(c); break;
+    case 'mejoras': renderMejoras(c); break;
+    case 'documentos': renderDocumentos(c); break;
+  }
+}
+
+// ================= DASHBOARD =================
+async function renderDashboard(c) {
+  const r = await apiCall('getKPIs');
+  const k = r.data || {};
+  c.innerHTML = `
+    <div class="grid">
+      <div class="kpi"><div class="valor">${k.pctRechazo || 0}%</div><div class="label">% Rechazo (NG) en inspecciones</div></div>
+      <div class="kpi"><div class="valor">${k.accionesAbiertas || 0}</div><div class="label">Acciones abiertas</div></div>
+      <div class="kpi"><div class="valor">${k.accionesCerradas || 0}</div><div class="label">Acciones cerradas</div></div>
+      <div class="kpi"><div class="valor">${k.tiempoPromedioCierre || 0} d</div><div class="label">Tiempo promedio de cierre</div></div>
+      <div class="kpi"><div class="valor">${k.rcasAbiertos || 0}</div><div class="label">RCA (8D) abiertos</div></div>
+    </div>
+    <div class="card">
+      <h3>RCA por origen</h3>
+      <canvas id="chartOrigen" height="90"></canvas>
+    </div>
+  `;
+  const origenData = k.rcasPorOrigen || {};
+  new Chart(document.getElementById('chartOrigen'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(origenData),
+      datasets: [{ label: 'RCA por origen', data: Object.values(origenData), backgroundColor: '#1f6fb2' }]
+    },
+    options: { plugins: { legend: { display: false } } }
+  });
+}
+
+// ================= INSPECCIÓN / LIBERACIÓN =================
+async function renderInspeccion(c) {
+  const headers = (await apiCall('getAll', { sheet: 'InspeccionHeader' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>Reportes de Inspección / Liberación</h3>
+      ${esSoloLectura() ? '' : '<button class="primary" onclick="mostrarFormInspeccion()">+ Nuevo reporte</button>'}
+      <div id="formInspeccionContainer"></div>
+      <table id="tablaInspecciones">
+        <thead><tr><th>OT</th><th>Proyecto</th><th>Cliente</th><th>N° Parte</th><th>Tipo</th><th>Inspector</th><th>Fecha</th><th>Documento</th></tr></thead>
+        <tbody>
+          ${headers.map(h => `<tr onclick="verDetalleInspeccion('${h.ID}')" style="cursor:pointer">
+            <td>${h.OT||''}</td><td>${h.Proyecto||''}</td><td>${h.Cliente||''}</td>
+            <td>${h.NumeroParte||''}</td><td>${h.TipoInspeccion||''}</td><td>${h.Inspector||''}</td><td>${h.Fecha||''}</td>
+            <td>${h.DriveLink ? `<a class="doclink" href="${h.DriveLink}" target="_blank" onclick="event.stopPropagation()">Ver original</a>` : '-'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card" id="graficoXRContainer"></div>
+    <div class="card hidden" id="detalleInspeccionContainer"></div>
+  `;
+}
+
+let detalleTemp = []; // filas dimensionales/visuales del formulario en captura
+
+function mostrarFormInspeccion() {
+  detalleTemp = [];
+  document.getElementById('formInspeccionContainer').innerHTML = `
+    <div class="row3">
+      <div><label>OT</label><input id="f_ot"></div>
+      <div><label>Proyecto</label><input id="f_proyecto"></div>
+      <div><label>Cliente</label><input id="f_cliente"></div>
+    </div>
+    <div class="row3">
+      <div><label>N° de Parte</label><input id="f_parte"></div>
+      <div><label>Tipo de Inspección</label>
+        <select id="f_tipo" onchange="toggleTipoDetalle()"><option value="Dimensional">Dimensional</option><option value="Visual">Visual</option></select>
+      </div>
+      <div><label>Equipo de Medición</label><input id="f_equipo"></div>
+    </div>
+    <div class="row3">
+      <div><label>Inspector</label><input id="f_inspector"></div>
+      <div><label>Fecha</label><input id="f_fecha" type="date"></div>
+      <div><label>Link Drive (formato original)</label><input id="f_drivelink" placeholder="https://drive.google.com/..."></div>
+    </div>
+    <h4>Detalle de características</h4>
+    <div id="detalleRows"></div>
+    <button class="secondary" onclick="agregarFilaDetalle()">+ Agregar característica</button>
+    <br><br>
+    <button class="primary" onclick="guardarInspeccion()">Guardar reporte</button>
+  `;
+  agregarFilaDetalle();
+}
+
+function toggleTipoDetalle(){ /* placeholder si se requiere lógica extra al cambiar tipo */ }
+
+function agregarFilaDetalle() {
+  const tipo = document.getElementById('f_tipo').value;
+  const idx = detalleTemp.length;
+  detalleTemp.push({ No: idx + 1, Tipo: tipo, Descripcion: '', Tolerancia: '', Resultado: '', Status: 'OK' });
+  const cont = document.getElementById('detalleRows');
+  const div = document.createElement('div');
+  div.className = 'detalleFila';
+  div.innerHTML = `
+    <span>${idx+1}</span>
+    <input placeholder="${tipo==='Dimensional' ? 'Especificación (nominal)' : 'Característica'}" onchange="detalleTemp[${idx}].Descripcion=this.value">
+    <input placeholder="${tipo==='Dimensional' ? 'Tol +/-' : 'Criterio visual'}" onchange="detalleTemp[${idx}].Tolerancia=this.value">
+    <input placeholder="Resultado" onchange="detalleTemp[${idx}].Resultado=this.value">
+    <select onchange="detalleTemp[${idx}].Status=this.value"><option value="OK">OK</option><option value="NG">NG</option></select>
+    <span></span>
+  `;
+  cont.appendChild(div);
+}
+
+async function guardarInspeccion() {
+  const header = {
+    OT: document.getElementById('f_ot').value,
+    Proyecto: document.getElementById('f_proyecto').value,
+    Cliente: document.getElementById('f_cliente').value,
+    NumeroParte: document.getElementById('f_parte').value,
+    TipoInspeccion: document.getElementById('f_tipo').value,
+    EquipoMedicion: document.getElementById('f_equipo').value,
+    Inspector: document.getElementById('f_inspector').value,
+    Fecha: document.getElementById('f_fecha').value,
+    DriveLink: document.getElementById('f_drivelink').value
+  };
+  const rHeader = await apiCall('add', { sheet: 'InspeccionHeader', record: header });
+  const inspeccionId = rHeader.data.ID;
+
+  for (const fila of detalleTemp) {
+    await apiCall('add', {
+      sheet: 'InspeccionDetalle',
+      record: {
+        InspeccionID: inspeccionId,
+        No: fila.No,
+        Tipo: fila.Tipo,
+        Especificacion: fila.Descripcion,
+        Tolerancia: fila.Tolerancia,
+        Resultado: fila.Resultado,
+        Status: fila.Status
+      }
+    });
+  }
+  alert('Reporte guardado');
+  cargarModulo('inspeccion');
+}
+
+async function verDetalleInspeccion(id) {
+  const detalles = (await apiCall('getAll', { sheet: 'InspeccionDetalle' })).data || [];
+  const propios = detalles.filter(d => d.InspeccionID === id);
+  const cont = document.getElementById('detalleInspeccionContainer');
+  cont.classList.remove('hidden');
+  cont.innerHTML = `
+    <h3>Detalle</h3>
+    <table><thead><tr><th>No</th><th>Tipo</th><th>Especificación/Característica</th><th>Tol / Criterio</th><th>Resultado</th><th>Status</th></tr></thead>
+    <tbody>${propios.map(d => `<tr>
+      <td>${d.No}</td><td>${d.Tipo}</td><td>${d.Especificacion}</td><td>${d.Tolerancia}</td><td>${d.Resultado}</td>
+      <td class="status-${(d.Status||'').toLowerCase()}">${d.Status}</td>
+    </tr>`).join('')}</tbody></table>
+  `;
+
+  // Si hay características dimensionales, ofrecer graficar X/R histórico
+  const dimensional = propios.find(d => d.Tipo === 'Dimensional');
+  if (dimensional) {
+    const headers = (await apiCall('getAll', { sheet: 'InspeccionHeader' })).data || [];
+    const h = headers.find(x => x.ID === id);
+    graficarXR(h.NumeroParte, dimensional.No);
+  } else {
+    graficarAtributo(propios);
+  }
+}
+
+async function graficarXR(numeroParte, noCaracteristica) {
+  const r = await apiCall('getHistoricoCaracteristica', { numeroParte, noCaracteristica });
+  const puntos = r.data || [];
+  const cont = document.getElementById('graficoXRContainer');
+  if (!puntos.length) { cont.innerHTML = ''; return; }
+  const especNominal = puntos[0].especificacion;
+  const tol = puntos[0].tolerancia;
+  cont.innerHTML = `<h3>Gráfico X — Característica N° ${noCaracteristica} (Parte ${numeroParte})</h3><canvas id="chartXR" height="100"></canvas>`;
+  new Chart(document.getElementById('chartXR'), {
+    type: 'line',
+    data: {
+      labels: puntos.map(p => p.fecha),
+      datasets: [
+        { label: 'Medición', data: puntos.map(p => p.resultado), borderColor: '#0b3d62', backgroundColor: '#0b3d62', tension: 0.2 },
+        { label: 'Nominal', data: puntos.map(() => especNominal), borderColor: '#1f9d55', borderDash: [4,4], pointRadius: 0 },
+        { label: 'LSC (Nominal+Tol)', data: puntos.map(() => especNominal + tol), borderColor: '#c0392b', borderDash: [2,2], pointRadius: 0 },
+        { label: 'LIC (Nominal-Tol)', data: puntos.map(() => especNominal - tol), borderColor: '#c0392b', borderDash: [2,2], pointRadius: 0 }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function graficarAtributo(propios) {
+  const ok = propios.filter(d => d.Status === 'OK').length;
+  const ng = propios.filter(d => d.Status === 'NG').length;
+  const cont = document.getElementById('graficoXRContainer');
+  cont.innerHTML = `<h3>Resultado por atributo (Visual)</h3><canvas id="chartAtributo" height="100"></canvas>`;
+  new Chart(document.getElementById('chartAtributo'), {
+    type: 'doughnut',
+    data: { labels: ['OK','NG'], datasets: [{ data: [ok, ng], backgroundColor: ['#1f9d55','#c0392b'] }] }
+  });
+}
+
+// ================= PLAN DE CONTROL =================
+async function renderPlanControl(c) {
+  const data = (await apiCall('getAll', { sheet: 'PlanControl' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>Plan de Control</h3>
+      ${esSoloLectura() ? '' : `
+      <div class="row3">
+        <div><label>Producto/Proceso</label><input id="pc_producto"></div>
+        <div><label>No. Operación</label><input id="pc_noop"></div>
+        <div><label>Descripción</label><input id="pc_desc"></div>
+      </div>
+      <div class="row3">
+        <div><label>Característica</label><input id="pc_caract"></div>
+        <div><label>Especificación</label><input id="pc_espec"></div>
+        <div><label>Método de Medición</label><input id="pc_metodo"></div>
+      </div>
+      <div class="row3">
+        <div><label>Tamaño de Muestra</label><input id="pc_muestra"></div>
+        <div><label>Frecuencia</label><input id="pc_frecuencia"></div>
+        <div><label>Plan de Reacción</label><input id="pc_reaccion"></div>
+      </div>
+      <button class="primary" onclick="guardarPlanControl()">Agregar</button>
+      `}
+      <table>
+        <thead><tr><th>Producto</th><th>No.Op</th><th>Característica</th><th>Especificación</th><th>Método</th><th>Muestra</th><th>Frecuencia</th><th>Reacción</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+          <td>${d.Producto||''}</td><td>${d.NoOperacion||''}</td><td>${d.Caracteristica||''}</td>
+          <td>${d.Especificacion||''}</td><td>${d.MetodoMedicion||''}</td><td>${d.TamanoMuestra||''}</td>
+          <td>${d.Frecuencia||''}</td><td>${d.PlanReaccion||''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function guardarPlanControl() {
+  await apiCall('add', {
+    sheet: 'PlanControl',
+    record: {
+      Producto: val('pc_producto'), NoOperacion: val('pc_noop'), Descripcion: val('pc_desc'),
+      Caracteristica: val('pc_caract'), Especificacion: val('pc_espec'), MetodoMedicion: val('pc_metodo'),
+      TamanoMuestra: val('pc_muestra'), Frecuencia: val('pc_frecuencia'), PlanReaccion: val('pc_reaccion')
+    }
+  });
+  cargarModulo('plancontrol');
+}
+
+// ================= RCA (8D) =================
+async function renderRCA(c) {
+  const data = (await apiCall('getAll', { sheet: 'RCA8D' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>RCA — Metodología 8D</h3>
+      ${esSoloLectura() ? '' : `
+      <div class="row3">
+        <div><label>Folio</label><input id="r_folio"></div>
+        <div><label>Origen</label>
+          <select id="r_origen"><option>Auditoria Interna</option><option>Auditoria Externa</option><option>Queja Cliente</option></select>
+        </div>
+        <div><label>Responsable</label><input id="r_resp"></div>
+      </div>
+      <div class="row2">
+        <div><label>D1 - Equipo Responsable</label><input id="r_d1"></div>
+        <div><label>D2 - Descripción del Problema</label><input id="r_d2"></div>
+      </div>
+      <div class="row2">
+        <div><label>D3 - Acción de Contención</label><input id="r_d3"></div>
+        <div><label>D4 - Causa Raíz</label><input id="r_d4"></div>
+      </div>
+      <div class="row2">
+        <div><label>D5 - Acción Correctiva Propuesta</label><input id="r_d5"></div>
+        <div><label>D6 - Implementación</label><input id="r_d6"></div>
+      </div>
+      <div class="row2">
+        <div><label>D7 - Acción Preventiva</label><input id="r_d7"></div>
+        <div><label>D8 - Cierre y Reconocimiento</label><input id="r_d8"></div>
+      </div>
+      <div class="row2">
+        <div><label>Fecha Apertura</label><input id="r_fapertura" type="date"></div>
+        <div><label>Estatus</label>
+          <select id="r_estatus"><option>Abierta</option><option>En proceso</option><option>Verificación</option><option>Cerrada</option></select>
+        </div>
+      </div>
+      <button class="primary" onclick="guardarRCA()">Guardar 8D</button>
+      `}
+      <table>
+        <thead><tr><th>Folio</th><th>Origen</th><th>D2 Problema</th><th>D4 Causa raíz</th><th>Estatus</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+          <td>${d.Folio||''}</td><td>${d.Origen||''}</td><td>${d.D2_DescripcionProblema||''}</td>
+          <td>${d.D4_CausaRaiz||''}</td><td><span class="badge ${(d.Estatus||'').replace(' ','.')}">${d.Estatus||''}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function guardarRCA() {
+  await apiCall('add', {
+    sheet: 'RCA8D',
+    record: {
+      Folio: val('r_folio'), Origen: val('r_origen'), Responsable: val('r_resp'),
+      D1_EquipoResponsable: val('r_d1'), D2_DescripcionProblema: val('r_d2'),
+      D3_AccionContencion: val('r_d3'), D4_CausaRaiz: val('r_d4'),
+      D5_AccionCorrectivaPropuesta: val('r_d5'), D6_Implementacion: val('r_d6'),
+      D7_Prevencion: val('r_d7'), D8_CierreReconocimiento: val('r_d8'),
+      FechaApertura: val('r_fapertura'), Estatus: val('r_estatus')
+    }
+  });
+  cargarModulo('rca');
+}
+
+// ================= ACCIONES CORRECTIVAS =================
+async function renderAcciones(c) {
+  const data = (await apiCall('getAll', { sheet: 'AccionesCorrectivas' })).data || [];
+  const rcas = (await apiCall('getAll', { sheet: 'RCA8D' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>Acciones Correctivas</h3>
+      ${esSoloLectura() ? '' : `
+      <div class="row3">
+        <div><label>RCA relacionado (folio)</label>
+          <select id="a_rca"><option value="">-- Independiente --</option>${rcas.map(r=>`<option value="${r.ID}">${r.Folio}</option>`).join('')}</select>
+        </div>
+        <div><label>Descripción</label><input id="a_desc"></div>
+        <div><label>Responsable</label><input id="a_resp"></div>
+      </div>
+      <div class="row3">
+        <div><label>Fecha Compromiso</label><input id="a_fcompromiso" type="date"></div>
+        <div><label>Estatus</label>
+          <select id="a_estatus"><option>Abierta</option><option>En proceso</option><option>Verificación</option><option>Cerrada</option></select>
+        </div>
+        <div><label>Evidencia (link Drive)</label><input id="a_evidencia"></div>
+      </div>
+      <button class="primary" onclick="guardarAccion()">Guardar acción</button>
+      `}
+      <table>
+        <thead><tr><th>Descripción</th><th>Responsable</th><th>Compromiso</th><th>Estatus</th><th>Evidencia</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+          <td>${d.Descripcion||''}</td><td>${d.Responsable||''}</td><td>${d.FechaCompromiso||''}</td>
+          <td><span class="badge ${(d.Estatus||'').replace(' ','.')}">${d.Estatus||''}</span></td>
+          <td>${d.Evidencia ? `<a class="doclink" href="${d.Evidencia}" target="_blank">Ver</a>` : '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function guardarAccion() {
+  await apiCall('add', {
+    sheet: 'AccionesCorrectivas',
+    record: {
+      RCA_ID: val('a_rca'), Descripcion: val('a_desc'), Responsable: val('a_resp'),
+      FechaCompromiso: val('a_fcompromiso'), Estatus: val('a_estatus'), Evidencia: val('a_evidencia')
+    }
+  });
+  cargarModulo('acciones');
+}
+
+// ================= MEJORA CONTINUA =================
+async function renderMejoras(c) {
+  const data = (await apiCall('getAll', { sheet: 'Mejoras' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>Mejora Continua</h3>
+      ${esSoloLectura() ? '' : `
+      <div class="row3">
+        <div><label>Título</label><input id="m_titulo"></div>
+        <div><label>Área/Proceso</label><input id="m_area"></div>
+        <div><label>Responsable</label><input id="m_resp"></div>
+      </div>
+      <div><label>Descripción</label><textarea id="m_desc"></textarea></div>
+      <div class="row3">
+        <div><label>Fecha Inicio</label><input id="m_finicio" type="date"></div>
+        <div><label>Estatus</label><select id="m_estatus"><option>Abierta</option><option>En proceso</option><option>Verificación</option><option>Cerrada</option></select></div>
+        <div><label>Beneficio esperado</label><input id="m_beneficio"></div>
+      </div>
+      <button class="primary" onclick="guardarMejora()">Guardar</button>
+      `}
+      <table>
+        <thead><tr><th>Título</th><th>Área</th><th>Responsable</th><th>Estatus</th><th>Beneficio</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+          <td>${d.Titulo||''}</td><td>${d.AreaProceso||''}</td><td>${d.Responsable||''}</td>
+          <td><span class="badge ${(d.Estatus||'').replace(' ','.')}">${d.Estatus||''}</span></td><td>${d.Beneficio||''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function guardarMejora() {
+  await apiCall('add', {
+    sheet: 'Mejoras',
+    record: {
+      Titulo: val('m_titulo'), AreaProceso: val('m_area'), Responsable: val('m_resp'),
+      Descripcion: val('m_desc'), FechaInicio: val('m_finicio'), Estatus: val('m_estatus'),
+      Beneficio: val('m_beneficio')
+    }
+  });
+  cargarModulo('mejoras');
+}
+
+// ================= DOCUMENTOS (solo links a Drive, sin duplicar) =================
+async function renderDocumentos(c) {
+  const data = (await apiCall('getAll', { sheet: 'Documentos' })).data || [];
+  c.innerHTML = `
+    <div class="card">
+      <h3>Documentos (formatos originales en Google Drive)</h3>
+      <p style="font-size:12px;color:#607080;">
+        Estos documentos NO se duplican: sólo se guarda el enlace directo a la carpeta/archivo
+        de Google Drive. El archivo original permanece siempre en Drive.
+      </p>
+      ${esSoloLectura() ? '' : `
+      <div class="row3">
+        <div><label>Nombre del documento</label><input id="doc_nombre"></div>
+        <div><label>Categoría</label><input id="doc_categoria" placeholder="Ej. Plan de Control, RCA, Liberación"></div>
+        <div><label>Link de Drive</label><input id="doc_link" placeholder="https://drive.google.com/..."></div>
+      </div>
+      <button class="primary" onclick="guardarDocumento()">Agregar enlace</button>
+      `}
+      <table>
+        <thead><tr><th>Nombre</th><th>Categoría</th><th>Enlace</th></tr></thead>
+        <tbody>${data.map(d => `<tr>
+          <td>${d.Nombre||''}</td><td>${d.Categoria||''}</td>
+          <td><a class="doclink" href="${d.Link||'#'}" target="_blank">Abrir en Drive</a></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function guardarDocumento() {
+  await apiCall('add', {
+    sheet: 'Documentos',
+    record: { Nombre: val('doc_nombre'), Categoria: val('doc_categoria'), Link: val('doc_link') }
+  });
+  cargarModulo('documentos');
+}
+
+// ---------- Helpers ----------
+function val(id) { return document.getElementById(id).value; }
+
+// ---------- Bootstrap: restaurar sesión si existe ----------
+window.onload = () => {
+  const saved = sessionStorage.getItem('sgc_session');
+  if (saved) {
+    SESSION = JSON.parse(saved);
+    iniciarApp();
+  }
+};
+</script>
+</body>
+</html>
