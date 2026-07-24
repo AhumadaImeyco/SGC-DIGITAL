@@ -47,6 +47,37 @@
   .detalleFila{display:grid;grid-template-columns:40px 1fr 90px 90px 80px 30px;gap:6px;align-items:center;margin-bottom:6px;}
   .tag{display:inline-block;background:#eef2f6;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;}
   a.doclink{color:var(--azul-claro);}
+
+  /* ============ TEMA OSCURO — SOLO PARA EL DASHBOARD DE KPI's ============ */
+  .kpiDark {
+    --k-bg: #0a0e1a; --k-surface: #111827; --k-surface2: #1a2235; --k-border: #1f2d45;
+    --k-accent: #00d4ff; --k-accent2: #7c3aed; --k-green: #10b981; --k-red: #f43f5e; --k-amber: #f59e0b;
+    --k-text: #e2e8f0; --k-muted: #64748b;
+    background: var(--k-bg); color: var(--k-text); margin: -18px; padding: 20px; border-radius: 8px;
+    font-family: 'DM Sans', Segoe UI, sans-serif;
+  }
+  .kpiDark .k-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+  .kpiDark .k-header h2 { font-size:18px; margin:0; }
+  .kpiDark .k-header .k-sub { color:var(--k-muted); font-size:12px; }
+  .kpiDark .k-badge-empresa { background:var(--k-surface2); padding:5px 15px; border-radius:8px; font-size:12px; border:1px solid var(--k-border); font-family:'DM Mono',monospace; }
+  .kpiDark .k-area-title { font-size:13px; font-weight:700; color:var(--k-accent); text-transform:uppercase; letter-spacing:1.5px; margin:22px 0 12px; display:flex; align-items:center; gap:10px; }
+  .kpiDark .k-area-title::after { content:''; flex:1; height:1px; background:var(--k-border); }
+  .kpiDark .k-charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:16px; }
+  .kpiDark .k-chart-card { background:var(--k-surface); border:1px solid var(--k-border); border-radius:14px; padding:16px; }
+  .kpiDark .k-table-card { background:var(--k-surface); border:1px solid var(--k-border); border-radius:14px; margin-top:24px; overflow:auto; }
+  .kpiDark .k-table-header { padding:16px 20px; border-bottom:1px solid var(--k-border); }
+  .kpiDark table.k-table { width:100%; border-collapse:collapse; }
+  .kpiDark table.k-table th { text-align:left; padding:10px 14px; font-size:10px; color:var(--k-muted); text-transform:uppercase; letter-spacing:.5px; background:var(--k-surface2); border-bottom:1px solid var(--k-border); white-space:nowrap; }
+  .kpiDark table.k-table td { padding:9px 14px; font-size:12px; border-bottom:1px solid rgba(31,45,69,.5); white-space:nowrap; }
+  .kpiDark .k-semaforo { display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:600; padding:3px 9px; border-radius:20px; }
+  .kpiDark .k-semaforo.good { background:rgba(16,185,129,.15); color:var(--k-green); }
+  .kpiDark .k-semaforo.bad { background:rgba(244,63,94,.15); color:var(--k-red); }
+  .kpiDark .k-semaforo.warn { background:rgba(245,158,11,.15); color:var(--k-amber); }
+  .kpiDark .k-semaforo::before { content:'●'; font-size:7px; }
+  .kpiDark .k-bar-cell { display:flex; align-items:center; gap:8px; }
+  .kpiDark .k-mini-bar { flex:1; height:6px; background:var(--k-surface2); border-radius:3px; overflow:hidden; min-width:50px; }
+  .kpiDark .k-mini-bar-fill { height:100%; border-radius:3px; }
+  .kpiDark .k-val-text { font-family:'DM Mono',monospace; font-size:11px; min-width:40px; text-align:right; }
 </style>
 </head>
 <body>
@@ -80,7 +111,7 @@
    CONFIGURACIÓN — reemplaza esta URL por la de tu Web App de
    Google Apps Script (ver guía de despliegue / configuracion_drive)
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbxheVivanagt_AfmXYyBqwDvLx0qXW_kaKHVWpe5HiySWdKJpwCe59Usl9YrkjFyEYnaQ/exec";
+const API_URL = "https://script.google.com/macros/s/PEGA_AQUI_TU_ID_DE_DESPLIEGUE/exec";
 
 let SESSION = null; // {usuario, nombre, rol}
 
@@ -163,31 +194,114 @@ function cargarModulo(id, btn) {
   }
 }
 
-// ================= DASHBOARD =================
+// ================= DASHBOARD DE KPI's (conectado a hoja KPIsMensuales) =================
+const MES_ORDEN = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const AREA_ORDEN = ['Produccion','Ingenieria','Mantenimiento','Calidad','Finanzas','Compras','RH','General'];
+const KPI_PALETA = ['#00d4ff','#10b981','#7c3aed','#f59e0b','#f43f5e','#818cf8','#34d399'];
+
+function kAvg(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function kFmt(v, f){ return f === 'pct' ? (v*100).toFixed(1)+'%' : (Math.round(v*100)/100); }
+function kStatus(meta, up, val){
+  if (up) {
+    if (val >= meta) return 'good';
+    if (val >= meta*0.9) return 'warn';
+    return 'bad';
+  } else {
+    if (meta === 0) return val === 0 ? 'good' : 'bad';
+    if (val <= meta) return 'good';
+    if (val <= meta*1.2) return 'warn';
+    return 'bad';
+  }
+}
+
 async function renderDashboard(c) {
-  const r = await apiCall('getKPIs');
-  const k = r.data || {};
-  c.innerHTML = `
-    <div class="grid">
-      <div class="kpi"><div class="valor">${k.pctRechazo || 0}%</div><div class="label">% Rechazo (NG) en inspecciones</div></div>
-      <div class="kpi"><div class="valor">${k.accionesAbiertas || 0}</div><div class="label">Acciones abiertas</div></div>
-      <div class="kpi"><div class="valor">${k.accionesCerradas || 0}</div><div class="label">Acciones cerradas</div></div>
-      <div class="kpi"><div class="valor">${k.tiempoPromedioCierre || 0} d</div><div class="label">Tiempo promedio de cierre</div></div>
-      <div class="kpi"><div class="valor">${k.rcasAbiertos || 0}</div><div class="label">RCA (8D) abiertos</div></div>
-    </div>
-    <div class="card">
-      <h3>RCA por origen</h3>
-      <canvas id="chartOrigen" height="90"></canvas>
-    </div>
-  `;
-  const origenData = k.rcasPorOrigen || {};
-  new Chart(document.getElementById('chartOrigen'), {
-    type: 'bar',
-    data: {
-      labels: Object.keys(origenData),
-      datasets: [{ label: 'RCA por origen', data: Object.values(origenData), backgroundColor: '#1f6fb2' }]
-    },
-    options: { plugins: { legend: { display: false } } }
+  c.innerHTML = '<p>Cargando KPIs...</p>';
+  const r = await apiCall('getAll', { sheet: 'KPIsMensuales' });
+  const filas = r.data || [];
+
+  if (!filas.length) {
+    c.innerHTML = `<div class="card"><p>Aún no hay datos en la hoja <b>KPIsMensuales</b>. Agrega filas ahí (Area, Indicador, Meta, Formato, Mejor, Anio, Mes, Valor) y este dashboard se llenará solo.</p></div>`;
+    return;
+  }
+
+  // Agrupar por Indicador
+  const porIndicador = {};
+  filas.forEach(f => {
+    const key = f.Indicador;
+    if (!porIndicador[key]) {
+      porIndicador[key] = {
+        indicador: f.Indicador, area: f.Area, meta: Number(f.Meta),
+        formato: f.Formato, up: f.Mejor === 'up', porMes: {}
+      };
+    }
+    porIndicador[key].porMes[f.Mes] = Number(f.Valor);
+  });
+
+  // Meses presentes, en orden cronológico
+  const mesesPresentes = MES_ORDEN.filter(m => filas.some(f => f.Mes === m));
+  const indicadores = Object.values(porIndicador);
+
+  // Áreas presentes, en orden preferido
+  const areasPresentes = AREA_ORDEN.filter(a => indicadores.some(i => i.area === a));
+
+  let html = `<div class="kpiDark">
+    <div class="k-header">
+      <div><h2>Dashboard de KPI's</h2><span class="k-sub">Datos alimentados desde tu Google Sheet (hoja KPIsMensuales)</span></div>
+      <div class="k-badge-empresa">SGC DIGITAL</div>
+    </div>`;
+
+  areasPresentes.forEach(area => {
+    const inds = indicadores.filter(i => i.area === area);
+    html += `<div class="k-area-title">${area}</div><div class="k-charts-grid"><div class="k-chart-card"><canvas id="chart_${area}"></canvas></div></div>`;
+  });
+
+  html += `<div class="k-table-card">
+    <div class="k-table-header"><div style="font-weight:600;font-size:14px;">Tablero de Control — Todos los Indicadores</div></div>
+    <table class="k-table"><thead><tr><th>Indicador</th><th>Meta</th>${mesesPresentes.map(m=>`<th>${m}</th>`).join('')}<th>Promedio</th><th>Estatus</th></tr></thead>
+    <tbody>`;
+
+  indicadores.forEach(k => {
+    const valsOrdenados = mesesPresentes.map(m => k.porMes[m]).filter(v => v !== undefined);
+    const a = kAvg(valsOrdenados);
+    const sc = kStatus(k.meta, k.up, a);
+    const label = sc === 'good' ? 'Cumple' : sc === 'warn' ? 'Alerta' : 'No Cumple';
+    const barColor = sc==='good' ? 'var(--k-green)' : sc==='warn' ? 'var(--k-amber)' : 'var(--k-red)';
+    const pctBar = k.formato === 'pct' ? Math.min(a/k.meta*100, 100).toFixed(0) : 100;
+    html += `<tr><td style="font-weight:600">${k.indicador}</td><td style="font-family:'DM Mono',monospace;color:var(--k-muted)">${kFmt(k.meta,k.formato)}</td>`;
+    mesesPresentes.forEach(m => {
+      const v = k.porMes[m];
+      if (v === undefined) { html += `<td>-</td>`; return; }
+      const scCell = kStatus(k.meta, k.up, v);
+      const cellColor = scCell==='good'?'var(--k-green)':scCell==='warn'?'var(--k-amber)':'var(--k-red)';
+      html += `<td style="color:${cellColor};font-family:'DM Mono',monospace">${kFmt(v,k.formato)}</td>`;
+    });
+    html += `<td><div class="k-bar-cell"><div class="k-mini-bar"><div class="k-mini-bar-fill" style="width:${pctBar}%;background:${barColor}"></div></div><span class="k-val-text" style="color:${barColor}">${kFmt(a,k.formato)}</span></div></td>
+      <td><span class="k-semaforo ${sc}">${label}</span></td></tr>`;
+  });
+
+  html += `</tbody></table></div></div>`;
+  c.innerHTML = html;
+
+  // Dibujar una gráfica por área con todos sus indicadores como líneas
+  Chart.defaults.color = '#64748b';
+  areasPresentes.forEach((area, idx) => {
+    const inds = indicadores.filter(i => i.area === area);
+    const canvas = document.getElementById(`chart_${area}`);
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: mesesPresentes,
+        datasets: inds.map((k, i) => ({
+          label: k.indicador,
+          data: mesesPresentes.map(m => k.porMes[m] !== undefined ? (k.formato === 'pct' ? k.porMes[m]*100 : k.porMes[m]) : null),
+          borderColor: KPI_PALETA[i % KPI_PALETA.length],
+          backgroundColor: KPI_PALETA[i % KPI_PALETA.length],
+          tension: 0.35,
+          spanGaps: true
+        }))
+      },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }
+    });
   });
 }
 
