@@ -63,7 +63,8 @@
   .kpiDark .k-area-title { font-size:13px; font-weight:700; color:var(--k-accent); text-transform:uppercase; letter-spacing:1.5px; margin:22px 0 12px; display:flex; align-items:center; gap:10px; }
   .kpiDark .k-area-title::after { content:''; flex:1; height:1px; background:var(--k-border); }
   .kpiDark .k-charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:16px; }
-  .kpiDark .k-chart-card { background:var(--k-surface); border:1px solid var(--k-border); border-radius:14px; padding:16px; }
+  .kpiDark .k-chart-card { background:var(--k-surface); border:1px solid var(--k-border); border-radius:14px; padding:16px; position:relative; height:280px; }
+  .kpiDark .k-chart-card canvas { position:absolute; }
   .kpiDark .k-table-card { background:var(--k-surface); border:1px solid var(--k-border); border-radius:14px; margin-top:24px; overflow:auto; }
   .kpiDark .k-table-header { padding:16px 20px; border-bottom:1px solid var(--k-border); }
   .kpiDark table.k-table { width:100%; border-collapse:collapse; }
@@ -300,7 +301,11 @@ async function renderDashboard(c) {
           spanGaps: true
         }))
       },
-      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }
+      options: {
+        maintainAspectRatio: false,
+        responsive: true,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }
+      }
     });
   });
 }
@@ -725,4 +730,5 @@ window.onload = () => {
 </script>
 </body>
 </html>
+
 
