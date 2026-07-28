@@ -251,9 +251,18 @@ async function renderDashboard(c) {
       <div class="k-badge-empresa">SGC DIGITAL</div>
     </div>`;
 
+  indicadores.forEach((k, i) => { k._idx = i; }); // id único por indicador para el canvas
+
   areasPresentes.forEach(area => {
     const inds = indicadores.filter(i => i.area === area);
-    html += `<div class="k-area-title">${area}</div><div class="k-charts-grid"><div class="k-chart-card"><canvas id="chart_${area}"></canvas></div></div>`;
+    html += `<div class="k-area-title">${area}</div><div class="k-charts-grid">`;
+    inds.forEach(k => {
+      html += `<div class="k-chart-card">
+        <div class="k-chart-title">${k.indicador}</div>
+        <canvas id="chart_ind_${k._idx}"></canvas>
+      </div>`;
+    });
+    html += `</div>`;
   });
 
   html += `<div class="k-table-card">
@@ -283,23 +292,22 @@ async function renderDashboard(c) {
   html += `</tbody></table></div></div>`;
   c.innerHTML = html;
 
-  // Dibujar una gráfica por área con todos sus indicadores como líneas
+  // Dibujar una gráfica individual por cada KPI, con línea de Meta como referencia
   Chart.defaults.color = '#64748b';
-  areasPresentes.forEach((area, idx) => {
-    const inds = indicadores.filter(i => i.area === area);
-    const canvas = document.getElementById(`chart_${area}`);
+  indicadores.forEach((k, i) => {
+    const canvas = document.getElementById(`chart_ind_${k._idx}`);
+    if (!canvas) return;
+    const valores = mesesPresentes.map(m => k.porMes[m] !== undefined ? (k.formato === 'pct' ? k.porMes[m]*100 : k.porMes[m]) : null);
+    const metaLinea = mesesPresentes.map(() => k.formato === 'pct' ? k.meta*100 : k.meta);
+    const colorLinea = KPI_PALETA[i % KPI_PALETA.length];
     new Chart(canvas, {
       type: 'line',
       data: {
         labels: mesesPresentes,
-        datasets: inds.map((k, i) => ({
-          label: k.indicador,
-          data: mesesPresentes.map(m => k.porMes[m] !== undefined ? (k.formato === 'pct' ? k.porMes[m]*100 : k.porMes[m]) : null),
-          borderColor: KPI_PALETA[i % KPI_PALETA.length],
-          backgroundColor: KPI_PALETA[i % KPI_PALETA.length],
-          tension: 0.35,
-          spanGaps: true
-        }))
+        datasets: [
+          { label: k.indicador, data: valores, borderColor: colorLinea, backgroundColor: colorLinea, tension: 0.35, spanGaps: true },
+          { label: 'Meta', data: metaLinea, borderColor: '#64748b', borderDash: [4,4], pointRadius: 0, borderWidth: 1 }
+        ]
       },
       options: {
         maintainAspectRatio: false,
@@ -730,6 +738,7 @@ window.onload = () => {
 </script>
 </body>
 </html>
+
 
 
 
